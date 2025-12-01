@@ -1,6 +1,10 @@
 from pyspark.sql import SparkSession
 from dotenv import load_dotenv
+import os
 
+
+# Carrega o ficheiro .env
+load_dotenv()
 
 def test_spark_read():
     # Inicializa o Spark com os pacotes necessários para ler S3/MinIO
