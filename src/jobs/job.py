@@ -13,8 +13,8 @@ spark = SparkSession.builder \
 
 # 2. Ler Dados (Ajustar caminho se estiveres a testar local vs docker)
 # No cluster usa: s3a://raw-data/Emissions.csv
-df_emissions = spark.read.csv("s3a://raw-data/Emissions.csv", header=True, inferSchema=True)
-df_temp = spark.read.csv("s3a://raw-data/Temperature.csv", header=True, inferSchema=True)
+df_emissions = spark.read.csv("s3a://raw-data/carbon/co2.csv", header=True, inferSchema=True)
+df_temp = spark.read.csv("s3a://raw-data/nasa/temperature.csv", header=True, inferSchema=True)
 
 # 3. TRUQUE: Unpivot (Melt) no ficheiro de Emissões
 # Transformar colunas Y1961, Y1962... numa única coluna "Year" e "Emission"
@@ -53,6 +53,10 @@ df_final.write \
     .option("user", "admin") \
     .option("password", "password") \
     .mode("overwrite") \
+    .save()
+
+print("Processamento concluído!")
+te") \
     .save()
 
 print("Processamento concluído!")

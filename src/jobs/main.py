@@ -21,8 +21,8 @@ def main():
     try:
         # 2. Ler Dados do MinIO (Bucket 'raw-data')
         # Nota: Se falhar aqui, é porque o Membro B ainda não fez upload dos ficheiros!
-        df_emissions = spark.read.csv("s3a://raw-data/Emissions.csv", header=True, inferSchema=True)
-        df_temp = spark.read.csv("s3a://raw-data/Temperature.csv", header=True, inferSchema=True)
+        df_emissions = spark.read.csv("s3a://raw-data/carbon/co2.csv", header=True, inferSchema=True)
+        df_temp = spark.read.csv("s3a://raw-data/nasa/temperature.csv", header=True, inferSchema=True)
         
         print(">>> Ficheiros lidos com sucesso. A transformar...")
 
@@ -63,9 +63,9 @@ def main():
         df_final.write \
             .format("jdbc") \
             .option("url", "jdbc:postgresql://postgres:5432/climate_db") \
-            .option("dbtable", "climate_analysis") \
+            .option("dbtable", "public.climate_analysis") \
             .option("user", "admin") \
-            .option("password", "password") \
+            .option("password", "climatechange") \
             .option("driver", "org.postgresql.Driver") \
             .mode("overwrite") \
             .save()
