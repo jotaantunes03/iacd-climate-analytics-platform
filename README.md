@@ -1,7 +1,7 @@
 # Global Climate Change Analytics Platform
 
 ## Project Objective
-[cite_start]This project aims to design and implement an end-to-end data engineering pipeline for comprehensive analysis of global climate change patterns using containerized distributed systems[cite: 3, 4].
+This project aims to design and implement an end-to-end data engineering pipeline for comprehensive analysis of global climate change patterns using containerized distributed systems[cite: 3, 4].
 
 ## Team
 * João Antunes
