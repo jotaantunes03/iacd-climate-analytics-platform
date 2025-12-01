@@ -1,0 +1,62 @@
+version: '3.8'
+services:
+  spark-master:
+    image: bitnami/spark:3.5
+    container_name: spark-master
+    environment:
+      - SPARK_MODE=master
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    volumes:
+      - ./src/jobs:/opt/bitnami/spark/jobs  # <--- ADICIONA ISTO
+    networks:
+      - climate-net
+
+  spark-worker:
+    image: bitnami/spark:3.5
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+    depends_on:
+      - spark-master
+    networks:
+      - climate-net
+
+  minio:
+    image: minio/minio
+    container_name: minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    command: server /data --console-address ":9001"
+    networks:
+      - climate-net
+
+  postgres:
+    image: postgres:13
+    container_name: postgres
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=climate_db
+    ports:
+      - "5432:5432"
+    networks:
+      - climate-net
+
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+    networks:
+      - climate-net
+
+networks:
+  climate-net:
+    driver: bridge
