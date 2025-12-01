@@ -61,8 +61,9 @@ def main():
             .format("jdbc") \
             .option("url", "jdbc:postgresql://postgres:5432/climate_db") \
             .option("dbtable", "public.climate_analysis") \
+            .option("dbtable", "public.climate_analysis") \
             .option("user", "admin") \
-            .option("password", "password") \
+            .option("password", "climatechange") \
             .option("driver", "org.postgresql.Driver") \
             .mode("overwrite") \
             .save()
