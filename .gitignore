@@ -1,9 +1,9 @@
 # Data files (NEVER commit these)
-data/
+#data/
 #*.csv
-*.json
-*.parquet
-*.gz
+#*.json
+#*.parquet
+#*.gz
 
 # IDE & OS
 .DS_Store
