@@ -3,7 +3,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, expr, regexp_replace
 
 def main():
-    # 1. Configurar Spark com dependências S3 (MinIO)
+    # 1. Configurar Spark
     spark = SparkSession.builder \
         .appName("ClimateAnalytics") \
         .config("spark.hadoop.fs.s3a.endpoint", "http://minio:9000") \
@@ -19,18 +19,15 @@ def main():
     print(">>> A iniciar processamento...")
 
     try:
-        # 2. Ler Dados do MinIO (Bucket 'raw-data')
-        # Nota: Se falhar aqui, é porque o Membro B ainda não fez upload dos ficheiros!
-        df_emissions = spark.read.csv("s3a://raw-data/Emissions.csv", header=True, inferSchema=True)
-        df_temp = spark.read.csv("s3a://raw-data/Temperature.csv", header=True, inferSchema=True)
+        # 2. Ler Dados do MinIO (CAMINHOS CORRIGIDOS)
+        df_emissions = spark.read.csv("s3a://raw-data/carbon/co2.csv", header=True, inferSchema=True)
+        df_temp = spark.read.csv("s3a://raw-data/nasa/temperature.csv", header=True, inferSchema=True)
         
         print(">>> Ficheiros lidos com sucesso. A transformar...")
 
-        # 3. Transformação: Unpivot das Emissões (Colunas de anos -> Linhas)
-        # Identificar colunas que começam por 'Y' (ex: Y1961)
+        # 3. Transformação
         year_columns = [c for c in df_emissions.columns if c.startswith('Y') and not c.endswith('F') and not c.endswith('N')]
         
-        # Criar expressão SQL dinâmica para o 'stack'
         stack_expr = f"stack({len(year_columns)}, " + \
                      ", ".join([f"'{c}', {c}" for c in year_columns]) + \
                      ") as (Year_Raw, Emission_Value)"
@@ -41,7 +38,7 @@ def main():
             expr(stack_expr)
         ).withColumn("Year", regexp_replace("Year_Raw", "Y", "").cast("int"))
 
-        # 4. Limpar Temperaturas e Juntar
+        # 4. Limpar Temperaturas
         df_temp_clean = df_temp.select(
             col("Area").alias("Country"),
             col("Year"),
@@ -58,12 +55,12 @@ def main():
         print(">>> Dados transformados. Exemplo:")
         df_final.show(5)
 
-        # 5. Gravar no Postgres
+        # 5. Gravar no Postgres (Tabela e DB corrigidas)
         print(">>> A gravar na Base de Dados...")
         df_final.write \
             .format("jdbc") \
             .option("url", "jdbc:postgresql://postgres:5432/climate_db") \
-            .option("dbtable", "climate_analysis") \
+            .option("dbtable", "public.climate_analysis") \
             .option("user", "admin") \
             .option("password", "password") \
             .option("driver", "org.postgresql.Driver") \
