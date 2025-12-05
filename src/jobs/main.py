@@ -1,40 +1,56 @@
 import sys
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, expr, regexp_replace
+from dotenv import load_dotenv
+import os
+
+# Carrega o ficheiro .env
+load_dotenv()
+
 
 def main():
     # 1. Configurar Spark
     spark = SparkSession.builder \
         .appName("ClimateAnalytics") \
-        .config("spark.hadoop.fs.s3a.endpoint", "http://minio:9000") \
-        .config("spark.hadoop.fs.s3a.access.key", "minioadmin") \
-        .config("spark.hadoop.fs.s3a.secret.key", "minioadmin") \
+        .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.4.0,org.postgresql:postgresql:42.6.0") \
+        .config("spark.hadoop.fs.s3a.endpoint", "http://localhost:9000") \
+        .config("spark.hadoop.fs.s3a.access.key", os.getenv("MINIO_USER"), ) \
+        .config("spark.hadoop.fs.s3a.secret.key", os.getenv("MINIO_PASSWORD")) \
         .config("spark.hadoop.fs.s3a.path.style.access", "true") \
         .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
         .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false") \
+        .config("spark.hadoop.fs.s3a.connection.establish.timeout", "5000") \
+        .config("spark.hadoop.fs.s3a.connection.timeout", "10000") \
+        .config("spark.hadoop.fs.s3a.socket.timeout", "10000") \
+        .config("spark.hadoop.fs.s3a.threads.keepalivetime", "60") \
+        .config("spark.hadoop.fs.s3a.multipart.purge.age", "86400") \
+        .config("spark.hadoop.fs.s3a.multipart.purge", "false") \
+        .config("spark.hadoop.fs.s3a.max.total.tasks", "10") \
+        .config("spark.hadoop.fs.s3a.aws.credentials.provider", "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider") \
         .getOrCreate()
 
     spark.sparkContext.setLogLevel("WARN")
-    
+
     print(">>> A iniciar processamento...")
 
     try:
         # 2. Ler Dados do MinIO (CAMINHOS CORRIGIDOS)
         df_emissions = spark.read.csv("s3a://raw-data/carbon/co2.csv", header=True, inferSchema=True)
         df_temp = spark.read.csv("s3a://raw-data/nasa/temperature.csv", header=True, inferSchema=True)
-        
+
         print(">>> Ficheiros lidos com sucesso. A transformar...")
 
         # 3. Transformação
-        year_columns = [c for c in df_emissions.columns if c.startswith('Y') and not c.endswith('F') and not c.endswith('N')]
-        
+        year_columns = [c for c in df_emissions.columns if
+                        c.startswith('Y') and not c.endswith('F') and not c.endswith('N')]
+
         stack_expr = f"stack({len(year_columns)}, " + \
                      ", ".join([f"'{c}', {c}" for c in year_columns]) + \
                      ") as (Year_Raw, Emission_Value)"
 
         df_emissions_long = df_emissions.select(
             col("Area").alias("Country"),
-            col("Item"), 
+            col("Item"),
             expr(stack_expr)
         ).withColumn("Year", regexp_replace("Year_Raw", "Y", "").cast("int"))
 
@@ -47,8 +63,8 @@ def main():
 
         # Join final
         df_final = df_emissions_long.join(
-            df_temp_clean, 
-            on=["Country", "Year"], 
+            df_temp_clean,
+            on=["Country", "Year"],
             how="inner"
         )
 
@@ -63,11 +79,11 @@ def main():
             .option("dbtable", "public.climate_analysis") \
             .option("dbtable", "public.climate_analysis") \
             .option("user", "admin") \
-            .option("password", "climatechange") \
+            .option("password", "password") \
             .option("driver", "org.postgresql.Driver") \
             .mode("overwrite") \
             .save()
-            
+
         print(">>> SUCESSO! Job terminado.")
 
     except Exception as e:
@@ -75,6 +91,7 @@ def main():
         sys.exit(1)
     finally:
         spark.stop()
+
 
 if __name__ == "__main__":
     main()

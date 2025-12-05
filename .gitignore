@@ -1,24 +1,25 @@
-# Data files (NEVER commit these)
-#data/
-#*.csv
-#*.json
-#*.parquet
-#*.gz
+# --- Ficheiros de Dados (IMPORTANTE: retirar o # destas linhas quando acabar o código e colocar numa frive) ---
+# data/
+# *.csv
+# *.json
+# *.parquet
+# *.gz
 
-# IDE & OS
+# --- IDE & OS (Já está correto) ---
 .DS_Store
 .idea/
 .vscode/
 __pycache__/
 *.ipynb_checkpoints/
 
-# Spark & Java
+# --- Spark & Java (Já está correto) ---
 target/
 *.class
 *.jar
 
-# Ignorar ambiente virtual
+# --- Outros ---
 venv/
-
-# Ignorar jars externos
 jars/
+
+# Para os ficheiros de logs:
+*.log
