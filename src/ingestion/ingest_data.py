@@ -27,11 +27,19 @@ def upload_file(bucket_name, file_path, object_name):
 
 
 if __name__ == "__main__":
-    # Caminhos para os teus ficheiros locais
-    base_path = "../../data/raw"
+    # Diretório deste ficheiro (src/ingestion)
+    CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+    # Project root: sobe dois níveis (src/ingestion -> src -> root)
+    PROJECT_ROOT = os.path.dirname(os.path.dirname(CURRENT_DIR))
+    # Caminho correto para data/raw
+    base_path = os.path.join(PROJECT_ROOT, "data", "raw")
+
+    print("Base path usado:", base_path)
+    print("global_temp existe?", os.path.exists(os.path.join(base_path, "global_temp.csv")))
+    print("co2_emissions existe?", os.path.exists(os.path.join(base_path, "co2_emissions.csv")))
 
     # Upload NASA Data
-    upload_file("raw-data", f"{base_path}/global_temp.csv", "nasa/temperature.csv")
+    upload_file("raw-data", os.path.join(base_path, "global_temp.csv"), "nasa/temperature.csv")
 
     # Upload Carbon Data
-    upload_file("raw-data", f"{base_path}/co2_emissions.csv", "carbon/co2.csv")
+    upload_file("raw-data", os.path.join(base_path, "co2_emissions.csv"), "carbon/co2.csv")

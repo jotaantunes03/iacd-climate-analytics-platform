@@ -59,7 +59,7 @@ def main():
         print(">>> A gravar na Base de Dados...")
         df_final.write \
             .format("jdbc") \
-            .option("url", "jdbc:postgresql://postgres:5432/climate_db") \
+            .option("url", "jdbc:postgresql://postgres:5432/climate_analysis") \
             .option("dbtable", "public.climate_analysis") \
             .option("dbtable", "public.climate_analysis") \
             .option("user", "admin") \
