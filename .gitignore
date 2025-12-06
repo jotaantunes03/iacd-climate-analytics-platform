@@ -20,6 +20,7 @@ target/
 # --- Outros ---
 venv/
 jars/
+.env
 
 # Para os ficheiros de logs:
 *.log

@@ -1,32 +1,19 @@
 import sys
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, expr, regexp_replace
-from dotenv import load_dotenv
 import os
-
-# Carrega o ficheiro .env
-load_dotenv()
-
 
 def main():
     # 1. Configurar Spark
+    # REMOVIDO: spark.jars.packages (porque já passamos os JARs manualmente no comando)
     spark = SparkSession.builder \
         .appName("ClimateAnalytics") \
-        .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.4.0,org.postgresql:postgresql:42.6.0") \
-        .config("spark.hadoop.fs.s3a.endpoint", "http://localhost:9000") \
-        .config("spark.hadoop.fs.s3a.access.key", os.getenv("MINIO_USER"), ) \
-        .config("spark.hadoop.fs.s3a.secret.key", os.getenv("MINIO_PASSWORD")) \
+        .config("spark.hadoop.fs.s3a.endpoint", "http://minio:9000") \
+        .config("spark.hadoop.fs.s3a.access.key", "minioadmin") \
+        .config("spark.hadoop.fs.s3a.secret.key", "minioadmin") \
         .config("spark.hadoop.fs.s3a.path.style.access", "true") \
         .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
         .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false") \
-        .config("spark.hadoop.fs.s3a.connection.establish.timeout", "5000") \
-        .config("spark.hadoop.fs.s3a.connection.timeout", "10000") \
-        .config("spark.hadoop.fs.s3a.socket.timeout", "10000") \
-        .config("spark.hadoop.fs.s3a.threads.keepalivetime", "60") \
-        .config("spark.hadoop.fs.s3a.multipart.purge.age", "86400") \
-        .config("spark.hadoop.fs.s3a.multipart.purge", "false") \
-        .config("spark.hadoop.fs.s3a.max.total.tasks", "10") \
-        .config("spark.hadoop.fs.s3a.aws.credentials.provider", "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider") \
         .getOrCreate()
 
     spark.sparkContext.setLogLevel("WARN")
@@ -34,15 +21,15 @@ def main():
     print(">>> A iniciar processamento...")
 
     try:
-        # 2. Ler Dados do MinIO (CAMINHOS CORRIGIDOS)
+        # 2. Ler Dados do MinIO
+        print(">>> A ler dados do MinIO...")
         df_emissions = spark.read.csv("s3a://raw-data/carbon/co2.csv", header=True, inferSchema=True)
         df_temp = spark.read.csv("s3a://raw-data/nasa/temperature.csv", header=True, inferSchema=True)
 
         print(">>> Ficheiros lidos com sucesso. A transformar...")
 
         # 3. Transformação
-        year_columns = [c for c in df_emissions.columns if
-                        c.startswith('Y') and not c.endswith('F') and not c.endswith('N')]
+        year_columns = [c for c in df_emissions.columns if c.startswith('Y') and not c.endswith('F') and not c.endswith('N')]
 
         stack_expr = f"stack({len(year_columns)}, " + \
                      ", ".join([f"'{c}', {c}" for c in year_columns]) + \
@@ -71,15 +58,14 @@ def main():
         print(">>> Dados transformados. Exemplo:")
         df_final.show(5)
 
-        # 5. Gravar no Postgres (Tabela e DB corrigidas)
+        # 5. Gravar no Postgres
         print(">>> A gravar na Base de Dados...")
         df_final.write \
             .format("jdbc") \
-            .option("url", "jdbc:postgresql://postgres:5432/climate_db") \
+            .option("url", "jdbc:postgresql://postgres:5432/climate_analysis") \
             .option("dbtable", "public.climate_analysis") \
-            .option("dbtable", "public.climate_analysis") \
-            .option("user", "admin") \
-            .option("password", "password") \
+            .option("user",  "admin") \
+            .option("password", "climatechange") \
             .option("driver", "org.postgresql.Driver") \
             .mode("overwrite") \
             .save()
@@ -87,11 +73,13 @@ def main():
         print(">>> SUCESSO! Job terminado.")
 
     except Exception as e:
-        print(f"!!! ERRO CRÍTICO: {e}")
+        print(f"!!! ERRO CRITICO: {e}")
+        # Imprime o erro completo para debugging
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
     finally:
         spark.stop()
-
 
 if __name__ == "__main__":
     main()
