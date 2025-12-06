@@ -1,0 +1,18 @@
+FROM python:3.9-slim
+
+WORKDIR /app
+
+# Copiar requirements e instalar dependências
+COPY requirements.txt .
+RUN pip install minio python-dotenv pandas
+
+# Copiar o código de ingestão
+COPY src/ingestion/ ./src/ingestion/
+
+COPY src/producer/ ./src/producer/
+
+COPY data/raw/ ./data/raw/
+COPY .env .
+
+# Definir o comando padrão
+CMD python src/ingestion/init_minio.py && python src/ingestion/ingest_data.py

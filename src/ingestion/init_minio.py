@@ -5,10 +5,11 @@ from dotenv import load_dotenv
 
 # Carrega o ficheiro .env
 load_dotenv()
+minio_endpoint = os.getenv("MINIO_ENDPOINT", "localhost:9000")
 
 # Configurações (Viriam Idealmente de variáveis de ambiente, mas para já hardcode para testar)
 minio_client = Minio(
-    "localhost:9000",
+    minio_endpoint,
     access_key=os.getenv("MINIO_USER"),
     secret_key=os.getenv("MINIO_PASSWORD"),
     secure=False

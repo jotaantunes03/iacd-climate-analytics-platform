@@ -291,3 +291,64 @@ spec:
       port: 3000
       targetPort: 3000
   type: NodePort
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: data-setup-job
+spec:
+  template:
+    spec:
+      containers:
+      - name: setup
+        image: climate-ingestion:v1
+        imagePullPolicy: Never  # Usa a imagem local que acabaste de criar
+        env:
+        - name: MINIO_ENDPOINT
+          value: "minio:9000"   # Dentro do cluster, o host é 'minio'
+        - name: MINIO_USER
+          valueFrom:
+            secretKeyRef:
+              name: minio-secret
+              key: rootUser
+        - name: MINIO_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: minio-secret
+              key: rootPassword
+      restartPolicy: OnFailure
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stream-producer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: stream-producer
+  template:
+    metadata:
+      labels:
+        app: stream-producer
+    spec:
+      containers:
+      - name: producer
+        image: climate-ingestion:v1
+        imagePullPolicy: Never
+        # Sobrescrevemos o comando para rodar o servidor de stream em vez da ingestão
+        command: ["python", "-u", "src/producer/stream_server.py"]
+        # Precisamos de copiar o script para a imagem. *Ver passo extra abaixo*
+        ports:
+        - containerPort: 9999
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: stream-source
+spec:
+  selector:
+    app: stream-producer
+  ports:
+  - port: 9999
+    targetPort: 9999
