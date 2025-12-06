@@ -301,7 +301,7 @@ spec:
     spec:
       containers:
       - name: setup
-        image: climate-ingestion:v1
+        image: climate-ingestion:vfinal
         imagePullPolicy: Never  # Usa a imagem local que acabaste de criar
         env:
         - name: MINIO_ENDPOINT
@@ -334,7 +334,7 @@ spec:
     spec:
       containers:
       - name: producer
-        image: climate-ingestion:v1
+        image: climate-ingestion:vfinal
         imagePullPolicy: Never
         # Sobrescrevemos o comando para rodar o servidor de stream em vez da ingestão
         command: ["python", "-u", "src/producer/stream_server.py"]
