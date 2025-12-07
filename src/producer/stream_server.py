@@ -3,79 +3,104 @@ import time
 import pandas as pd
 import os
 import sys
+import threading  # <--- IMPORTANTE
 
-# Configurações
+# --- CONFIGURAÇÕES ---
 HOST = '0.0.0.0'
 PORT = 9999
-DATA_FILE = '/app/data/raw/global_temp.csv'
-SEND_INTERVAL = 1.0  # 1 segundo entre envios (Mais lento para visualização)
+TEMP_FILE = '/app/data/raw/global_temp.csv'
+CO2_FILE = '/app/data/raw/co2_emissions.csv'
+SEND_INTERVAL = 0.002
+SEPARATOR = "|"
+FINAL_COLUMNS = [
+    'Year', 'Value', 'Area', 'Area Code (M49)', 'Element', 'Element Code', 'Unit', 'Flag',
+    'Domain', 'Domain Code', 'Months', 'Months Code', 'Flag Description',
+    'Item', 'Item Code', 'Source', 'Source Code'
+]
+
+
+def load_and_prepare_data():
+    print(">>> A unificar datasets...")
+    df_combined = pd.DataFrame()
+    try:
+        df_temp = pd.read_csv(TEMP_FILE)
+        for col in FINAL_COLUMNS:
+            if col not in df_temp.columns: df_temp[col] = "N/A"
+    except:
+        df_temp = pd.DataFrame()
+
+    try:
+        df_raw = pd.read_csv(CO2_FILE)
+        id_vars = [c for c in df_raw.columns if not c.startswith('Y')]
+        value_vars = [c for c in df_raw.columns if c.startswith('Y') and 'F' not in c and 'N' not in c]
+        df_melted = df_raw.melt(id_vars=id_vars, value_vars=value_vars, var_name='Year_Raw', value_name='Value')
+        df_melted['Year'] = df_melted['Year_Raw'].str.replace('Y', '')
+        for col in FINAL_COLUMNS:
+            if col not in df_melted.columns: df_melted[col] = "N/A"
+        df_co2 = df_melted
+    except:
+        df_co2 = pd.DataFrame()
+
+    if not df_temp.empty and not df_co2.empty:
+        df_combined = pd.concat([df_temp, df_co2], ignore_index=True)
+    elif not df_temp.empty:
+        df_combined = df_temp
+    elif not df_co2.empty:
+        df_combined = df_co2
+
+    if not df_combined.empty:
+        df_combined = df_combined[FINAL_COLUMNS]
+        for col in df_combined.columns:
+            df_combined[col] = df_combined[col].astype(str).str.replace('\n', ' ').str.replace('|', '')
+        df_combined = df_combined.sort_values(by='Year')
+
+    print(f">>> DATASET CARREGADO: {len(df_combined)} linhas.")
+    return df_combined
+
+
+# Função que corre em paralelo para cada cliente
+def handle_client(conn, addr, df):
+    print(f"🟢 [Thread] Iniciando envio para {addr}")
+    try:
+        while True:  # Loop infinito de dados
+            for _, row in df.iterrows():
+                msg = SEPARATOR.join(row.values) + "\n"
+                try:
+                    conn.sendall(msg.encode('utf-8'))
+                    time.sleep(SEND_INTERVAL)
+                except (BrokenPipeError, ConnectionResetError):
+                    print(f"🔴 Cliente {addr} desconectou.")
+                    return  # Mata a thread se o cliente sair
+    except Exception as e:
+        print(f"⚠️ Erro na thread {addr}: {e}")
+    finally:
+        conn.close()
 
 
 def start_server():
-    print(f"--- INICIANDO SERVIDOR DE STREAMING ROBUSTO ---")
-    print(f"Host: {HOST} | Porta: {PORT}")
+    print(f"--- SERVIDOR MULTI-THREAD ---")
+    df = load_and_prepare_data()
+    if df.empty: sys.exit(1)
 
-    # Configuração de Rede Segura
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
     try:
         server_socket.bind((HOST, PORT))
         server_socket.listen(5)
+        print(f">>> À escuta em {HOST}:{PORT}")
     except Exception as e:
-        print(f"ERRO CRÍTICO ao abrir a porta: {e}")
         sys.exit(1)
 
-    # Carregamento de Dados
-    if os.path.exists(DATA_FILE):
-        print(f"A carregar ficheiro: {DATA_FILE}...")
-        try:
-            # Carrega apenas colunas necessárias para poupar memória
-            df = pd.read_csv(DATA_FILE, usecols=['Year', 'Value', 'Area'])
-            print(f"SUCESSO: {len(df)} linhas carregadas em memória.")
-        except Exception as e:
-            print(f"ERRO ao ler CSV: {e}")
-            sys.exit(1)
-    else:
-        print(f"ERRO: Ficheiro não encontrado no caminho: {DATA_FILE}")
-        sys.exit(1)
-
-    print(">>> SERVIDOR PRONTO. À espera de conexões...")
-
-    # Loop Principal (Nunca morre)
     while True:
         try:
+            # O servidor aceita a conexão e passa-a imediatamente para uma thread
             conn, addr = server_socket.accept()
-            print(f"\n🟢 NOVA CONEXÃO RECEBIDA DE: {addr}")
-
-            try:
-                # Loop de Envio de Dados
-                while True:
-                    print(f"--> A iniciar envio do dataset para {addr}...")
-
-                    for index, row in df.iterrows():
-                        # Formato CSV simples: Ano,Temperatura,País
-                        msg = f"{row['Year']},{row['Value']},{row['Area']}\n"
-
-                        conn.sendall(msg.encode('utf-8'))
-
-                        # Delay para simular tempo real (ajustável)
-                        time.sleep(SEND_INTERVAL)
-
-                    print("--> Fim do dataset. Reiniciando o envio (Loop Infinito)...")
-                    time.sleep(2)  # Pausa pequena entre loops do dataset
-
-            except (BrokenPipeError, ConnectionResetError):
-                print(f"🔴 Cliente {addr} desconectou-se.")
-            except Exception as e:
-                print(f"⚠️ Erro durante o envio: {e}")
-            finally:
-                conn.close()
-                print(">>> Conexão fechada. À espera do próximo cliente...")
-
+            t = threading.Thread(target=handle_client, args=(conn, addr, df))
+            t.start()
         except Exception as e:
-            print(f"❌ Erro genérico no servidor: {e}")
-            time.sleep(1)  # Espera 1s antes de recuperar de um erro grave
+            print(f"Erro no accept: {e}")
+            time.sleep(1)
 
 
 if __name__ == "__main__":

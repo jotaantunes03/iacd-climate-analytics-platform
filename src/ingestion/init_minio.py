@@ -1,31 +1,32 @@
 from minio import Minio
 import os
-from dotenv import load_dotenv
 
-
-# Carrega o ficheiro .env
-load_dotenv()
-minio_endpoint = os.getenv("MINIO_ENDPOINT", "localhost:9000")
-
-# Configurações (Viriam Idealmente de variáveis de ambiente, mas para já hardcode para testar)
-minio_client = Minio(
-    minio_endpoint,
-    access_key=os.getenv("MINIO_USER"),
-    secret_key=os.getenv("MINIO_PASSWORD"),
-    secure=False
-)
+# Configurações
+# Como este script corre DENTRO do cluster (no pod do producer), usamos o nome do serviço 'minio'
+MINIO_ENDPOINT = "minio:9000"
+MINIO_ACCESS_KEY = "minioadmin"
+MINIO_SECRET_KEY = "minioadmin"
 
 buckets = ["raw-data", "processed-data"]
 
-
 def setup_buckets():
-    for bucket in buckets:
-        if not minio_client.bucket_exists(bucket):
-            minio_client.make_bucket(bucket)
-            print(f"Bucket '{bucket}' criado com sucesso.")
-        else:
-            print(f"Bucket '{bucket}' já existe.")
+    print(f"--> A conectar ao MinIO em {MINIO_ENDPOINT}...")
+    client = Minio(
+        MINIO_ENDPOINT,
+        access_key=MINIO_ACCESS_KEY,
+        secret_key=MINIO_SECRET_KEY,
+        secure=False
+    )
 
+    for bucket in buckets:
+        try:
+            if not client.bucket_exists(bucket):
+                client.make_bucket(bucket)
+                print(f"   [CRIADO] Bucket '{bucket}'")
+            else:
+                print(f"   [OK] Bucket '{bucket}' já existe")
+        except Exception as e:
+            print(f"   [ERRO] Ao criar bucket {bucket}: {e}")
 
 if __name__ == "__main__":
     setup_buckets()
