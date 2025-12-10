@@ -1,13 +1,38 @@
 import sys
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, expr, regexp_replace
-import os
+from pyspark.sql.functions import col
+from pyspark.sql.types import DoubleType, IntegerType
+
+
+def write_to_postgres(df, epoch_id, table_name):
+    # Esta função é chamada a cada micro-batch
+    count = df.count()
+    if count > 0:
+        print(f"--> [Batch {epoch_id}] Gravando {count} registos na tabela '{table_name}'...")
+        try:
+            df.write \
+                .format("jdbc") \
+                .option("url", "jdbc:postgresql://postgres:5432/climate_analysis") \
+                .option("dbtable", table_name) \
+                .option("user", "admin") \
+                .option("password", "climatechange") \
+                .option("driver", "org.postgresql.Driver") \
+                .mode("append") \
+                .save()
+            print("   [OK] Sucesso.")
+        except Exception as e:
+            print(f"   [ERRO] Falha ao gravar no Postgres: {e}")
+    else:
+        pass  # Batch vazio, ignorar
+
 
 def main():
-    # 1. Configurar Spark
-    # REMOVIDO: spark.jars.packages (porque já passamos os JARs manualmente no comando)
     spark = SparkSession.builder \
-        .appName("ClimateAnalytics") \
+        .appName("ClimateContinuousProcessor") \
+        .config("spark.executor.memory", "512m") \
+        .config("spark.driver.memory", "512m") \
+        .config("spark.cores.max", "1") \
+        .config("spark.sql.shuffle.partitions", "2") \
         .config("spark.hadoop.fs.s3a.endpoint", "http://minio:9000") \
         .config("spark.hadoop.fs.s3a.access.key", "minioadmin") \
         .config("spark.hadoop.fs.s3a.secret.key", "minioadmin") \
@@ -17,69 +42,57 @@ def main():
         .getOrCreate()
 
     spark.sparkContext.setLogLevel("WARN")
+    print(">>> PROCESSADOR CONTÍNUO ATIVO (Vigiando MinIO -> Postgres)...")
 
-    print(">>> A iniciar processamento...")
+    # ---------------------------------------------------------
+    # Leitura CONTÍNUA (readStream) em vez de Batch (read)
+    # ---------------------------------------------------------
 
-    try:
-        # 2. Ler Dados do MinIO
-        print(">>> A ler dados do MinIO...")
-        df_emissions = spark.read.csv("s3a://raw-data/carbon/co2.csv", header=True, inferSchema=True)
-        df_temp = spark.read.csv("s3a://raw-data/nasa/temperature.csv", header=True, inferSchema=True)
+    # 1. Stream de Temperatura
+    df_temp_raw = spark.readStream \
+        .format("csv") \
+        .option("header", "false") \
+        .schema("year INT, temp DOUBLE, country STRING, unit STRING, _c4 STRING, _c5 STRING, _c6 STRING") \
+        .load("s3a://raw-data/temperature/")
 
-        print(">>> Ficheiros lidos com sucesso. A transformar...")
+    df_temp = df_temp_raw.select(
+        col("year").alias("Year"),
+        col("temp").alias("Temp_Change"),
+        col("country").alias("Country")
+    ).filter(col("Year").isNotNull())
 
-        # 3. Transformação
-        year_columns = [c for c in df_emissions.columns if c.startswith('Y') and not c.endswith('F') and not c.endswith('N')]
+    # 2. Stream de Emissões
+    df_co2_raw = spark.readStream \
+        .format("csv") \
+        .option("header", "false") \
+        .schema("year INT, emissions DOUBLE, country STRING, element STRING, unit STRING, item STRING, source STRING") \
+        .load("s3a://raw-data/emissions/")
 
-        stack_expr = f"stack({len(year_columns)}, " + \
-                     ", ".join([f"'{c}', {c}" for c in year_columns]) + \
-                     ") as (Year_Raw, Emission_Value)"
+    df_co2 = df_co2_raw.select(
+        col("year").alias("Year"),
+        col("emissions").alias("Emissions"),
+        col("country").alias("Country"),
+        col("item").alias("Item")
+    ).filter(col("Year").isNotNull())
 
-        df_emissions_long = df_emissions.select(
-            col("Area").alias("Country"),
-            col("Item"),
-            expr(stack_expr)
-        ).withColumn("Year", regexp_replace("Year_Raw", "Y", "").cast("int"))
+    # ---------------------------------------------------------
+    # Escrita (writeStream)
+    # ---------------------------------------------------------
 
-        # 4. Limpar Temperaturas
-        df_temp_clean = df_temp.select(
-            col("Area").alias("Country"),
-            col("Year"),
-            col("Value").alias("Temp_Change")
-        ).filter(col("Element") == "Temperature change")
+    # Processar Temperatura a cada 30 segundos
+    query_temp = df_temp.writeStream \
+        .foreachBatch(lambda df, id: write_to_postgres(df, id, "climate_analysis")) \
+        .trigger(processingTime='30 seconds') \
+        .start()
 
-        # Join final
-        df_final = df_emissions_long.join(
-            df_temp_clean,
-            on=["Country", "Year"],
-            how="inner"
-        )
+    # Processar CO2 a cada 30 segundos
+    query_co2 = df_co2.writeStream \
+        .foreachBatch(lambda df, id: write_to_postgres(df, id, "co2_emissions")) \
+        .trigger(processingTime='30 seconds') \
+        .start()
 
-        print(">>> Dados transformados. Exemplo:")
-        df_final.show(5)
+    spark.streams.awaitAnyTermination()
 
-        # 5. Gravar no Postgres
-        print(">>> A gravar na Base de Dados...")
-        df_final.write \
-            .format("jdbc") \
-            .option("url", "jdbc:postgresql://postgres:5432/climate_analysis") \
-            .option("dbtable", "public.climate_analysis") \
-            .option("user",  "admin") \
-            .option("password", "climatechange") \
-            .option("driver", "org.postgresql.Driver") \
-            .mode("overwrite") \
-            .save()
-
-        print(">>> SUCESSO! Job terminado.")
-
-    except Exception as e:
-        print(f"!!! ERRO CRITICO: {e}")
-        # Imprime o erro completo para debugging
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
-    finally:
-        spark.stop()
 
 if __name__ == "__main__":
     main()

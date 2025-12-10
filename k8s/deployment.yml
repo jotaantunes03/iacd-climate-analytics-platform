@@ -187,7 +187,7 @@ spec:
             memory: "512Mi"
           limits:
             cpu: "1"
-            memory: "1Gi"
+            memory: "3Gi"
         volumeMounts:
         - name: spark-jobs
           mountPath: /opt/spark/jobs
@@ -247,7 +247,7 @@ spec:
             memory: "512Mi"
           limits:
             cpu: "1"
-            memory: "1Gi"
+            memory: "3Gi"
         volumeMounts:
         - name: spark-jobs
           mountPath: /opt/spark/jobs

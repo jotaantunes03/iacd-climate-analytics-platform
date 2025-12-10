@@ -10,7 +10,7 @@ HOST = '0.0.0.0'
 PORT = 9999
 TEMP_FILE = '/app/data/raw/global_temp.csv'
 CO2_FILE = '/app/data/raw/co2_emissions.csv'
-SEND_INTERVAL = 0.002
+SEND_INTERVAL = 2
 SEPARATOR = "|"
 FINAL_COLUMNS = [
     'Year', 'Value', 'Area', 'Area Code (M49)', 'Element', 'Element Code', 'Unit', 'Flag',
