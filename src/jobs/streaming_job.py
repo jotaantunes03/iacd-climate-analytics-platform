@@ -1,8 +1,15 @@
+"""
+This module defines a Spark Streaming job that reads climate data from a socket,
+parses it, separates it into two distinct streams (temperature and CO2), and
+writes them to separate locations in a MinIO S3 bucket.
+"""
+
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import split, col, trim
 import sys
 
-# Configuração
+# --- Spark Session Configuration ---
+# Initializes a Spark session with S3 configurations for MinIO.
 spark = SparkSession.builder \
     .appName("ClimateStreamingRobust") \
     .config("spark.hadoop.fs.s3a.endpoint", "http://minio:9000") \
@@ -15,23 +22,27 @@ spark = SparkSession.builder \
 
 spark.sparkContext.setLogLevel("WARN")
 
-# --- LIMPEZA AUTOMÁTICA DE CHECKPOINTS ---
+# --- AUTOMATIC CHECKPOINT CLEANUP ---
+# This block attempts to delete old checkpoint directories to prevent conflicts
+# during stream restarts. This is useful in development environments.
 try:
-    print(">>> A limpar checkpoints antigos para evitar conflitos...")
+    print(">>> Cleaning up old checkpoints to avoid conflicts...")
     fs = spark._jvm.org.apache.hadoop.fs.FileSystem.get(spark._jsc.hadoopConfiguration())
     fs.delete(spark._jvm.org.apache.hadoop.fs.Path("s3a://raw-data/checkpoints/"), True)
 except Exception as e:
-    print(f"!!! (Info) Checkpoints não limpos ou inexistentes: {e}")
+    print(f"!!! (Info) Checkpoints not cleaned or non-existent: {e}")
 
-# 1. Ler do Socket
-lines = spark.readStream \
+# 1. Read from Socket
+# Creates a DataFrame representing the stream of data from the specified socket.
+socket_stream_df = spark.readStream \
     .format("socket") \
     .option("host", "stream-source") \
     .option("port", 9999) \
     .load()
 
-# 2. Parse (Usando \\| para escapar o pipe)
-raw_data = lines.select(
+# 2. Parse Data (Escaping the pipe character)
+# Splits the single 'value' column into multiple columns based on the '|' delimiter.
+parsed_data_df = socket_stream_df.select(
     split(col("value"), "\\|").getItem(0).alias("Year"),
     split(col("value"), "\\|").getItem(1).alias("Value"),
     split(col("value"), "\\|").getItem(2).alias("Area"),
@@ -51,24 +62,27 @@ raw_data = lines.select(
     split(col("value"), "\\|").getItem(16).alias("Source_Code")
 )
 
-# 3. Separar Streams com Lógica ROBUSTA
-# Usamos trim() para remover espaços em branco que possam enganar o filtro
-# 'Domain' só existe na Temperatura. 'Item' só existe no CO2.
-# Verificamos também se não é "nan" (string) ou "N/A"
+# 3. Split Streams with Robust Logic
+# The logic separates the raw data into two DataFrames based on unique columns.
+# We use trim() to remove whitespace that might interfere with the filter.
+# 'Domain' only exists in Temperature data. 'Item' only exists in CO2 data.
+# We also check for "nan" (string) or "N/A" to ensure data quality.
 
-df_temp = raw_data.filter(
+temperature_df = parsed_data_df.filter(
     (trim(col("Domain")) != "N/A") &
     (trim(col("Domain")) != "nan")
 ).select("Year", "Value", "Area", "Element", "Unit", "Domain", "Months")
 
-df_co2 = raw_data.filter(
+co2_df = parsed_data_df.filter(
     (trim(col("Item")) != "N/A") &
     (trim(col("Item")) != "nan")
 ).select("Year", "Value", "Area", "Element", "Unit", "Item", "Source")
 
-# 4. Escrever
-# Trigger aumentado para 10 segundos para apanhar mais dados misturados
-query_temp = df_temp.writeStream \
+# 4. Write Streams to S3
+# Configure and start the streaming queries to write the data to S3.
+# The trigger is set to 10 seconds to capture more mixed data in each batch.
+
+temperature_query = temperature_df.writeStream \
     .outputMode("append") \
     .format("csv") \
     .option("path", "s3a://raw-data/temperature/") \
@@ -77,7 +91,7 @@ query_temp = df_temp.writeStream \
     .trigger(processingTime='10 seconds') \
     .start()
 
-query_co2 = df_co2.writeStream \
+co2_query = co2_df.writeStream \
     .outputMode("append") \
     .format("csv") \
     .option("path", "s3a://raw-data/emissions/") \
@@ -86,4 +100,5 @@ query_co2 = df_co2.writeStream \
     .trigger(processingTime='10 seconds') \
     .start()
 
+# Wait for any of the streams to terminate
 spark.streams.awaitAnyTermination()
