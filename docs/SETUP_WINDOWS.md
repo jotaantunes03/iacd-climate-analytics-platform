@@ -23,6 +23,27 @@ git clone https://github.com/jotaantunes03/iacd-climate-analytics-platform.git
 cd iacd-climate-analytics-platform
 ```
 
+### Dependencies (JAR Files)
+The Spark jobs require specific JAR files for connecting to PostgreSQL and MinIO (S3). These must be placed in a `jars/` directory in the project root.
+
+Run the following PowerShell commands to create the directory and download the required files:
+
+```powershell
+# Create jars directory
+New-Item -ItemType Directory -Force -Path "jars"
+
+# Download PostgreSQL Driver
+Invoke-WebRequest -Uri "https://jdbc.postgresql.org/download/postgresql-42.6.0.jar" -OutFile "jars/postgresql-42.6.0.jar"
+
+# Download Hadoop-AWS
+Invoke-WebRequest -Uri "https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar" -OutFile "jars/hadoop-aws-3.3.4.jar"
+
+# Download AWS Java SDK Bundle
+Invoke-WebRequest -Uri "https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.540/aws-java-sdk-bundle-1.12.540.jar" -OutFile "jars/aws-java-sdk-bundle-1.12.540.jar"
+```
+
+> **Note:** The `start_project.ps1` script will attempt to download these automatically if they are missing.
+
 ---
 
 ## 2. Environment Cleanup (Optional)

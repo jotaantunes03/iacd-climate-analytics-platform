@@ -18,19 +18,10 @@ spark = SparkSession.builder \
     .config("spark.hadoop.fs.s3a.path.style.access", "true") \
     .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
     .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false") \
+    .config("spark.sql.adaptive.enabled", "false") \
     .getOrCreate()
 
 spark.sparkContext.setLogLevel("WARN")
-
-# --- AUTOMATIC CHECKPOINT CLEANUP ---
-# This block attempts to delete old checkpoint directories to prevent conflicts
-# during stream restarts. This is useful in development environments.
-try:
-    print(">>> Cleaning up old checkpoints to avoid conflicts...")
-    fs = spark._jvm.org.apache.hadoop.fs.FileSystem.get(spark._jsc.hadoopConfiguration())
-    fs.delete(spark._jvm.org.apache.hadoop.fs.Path("s3a://raw-data/checkpoints/"), True)
-except Exception as e:
-    print(f"!!! (Info) Checkpoints not cleaned or non-existent: {e}")
 
 # 1. Read from Socket
 # Creates a DataFrame representing the stream of data from the specified socket.
@@ -88,7 +79,7 @@ temperature_query = temperature_df.writeStream \
     .option("path", "s3a://raw-data/temperature/") \
     .option("checkpointLocation", "s3a://raw-data/checkpoints/temperature/") \
     .option("header", "false") \
-    .trigger(processingTime='10 seconds') \
+    .trigger(processingTime='20 seconds') \
     .start()
 
 co2_query = co2_df.writeStream \
@@ -97,7 +88,7 @@ co2_query = co2_df.writeStream \
     .option("path", "s3a://raw-data/emissions/") \
     .option("checkpointLocation", "s3a://raw-data/checkpoints/emissions/") \
     .option("header", "false") \
-    .trigger(processingTime='10 seconds') \
+    .trigger(processingTime='20 seconds') \
     .start()
 
 # Wait for any of the streams to terminate

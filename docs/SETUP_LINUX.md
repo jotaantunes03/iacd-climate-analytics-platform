@@ -15,7 +15,7 @@ Install the necessary command-line tools and system dependencies.
 
 ### 1.1. System Dependencies
 ```bash
-sudo apt update && sudo apt install -y curl git conntrack
+sudo apt update && sudo apt install -y curl git conntrack wget
 ```
 
 ### 1.2. Install `kubectl`
@@ -31,6 +31,25 @@ sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
 curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
 sudo install minikube-linux-amd64 /usr/local/bin/minikube
 ```
+
+### 1.4. Dependencies (JAR Files)
+The Spark jobs require specific JAR files. Run the following commands to create the `jars` directory and download them:
+
+```bash
+# Create jars directory
+mkdir -p jars
+
+# Download PostgreSQL Driver
+wget -P jars/ https://jdbc.postgresql.org/download/postgresql-42.6.0.jar
+
+# Download Hadoop-AWS
+wget -P jars/ https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar
+
+# Download AWS Java SDK Bundle
+wget -P jars/ https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.540/aws-java-sdk-bundle-1.12.540.jar
+```
+
+> **Note:** The `start_project.ps1` script automates this for Windows. For Linux, these manual steps are required.
 
 ---
 
@@ -145,15 +164,7 @@ The streaming job is for real-time visualization only. To permanently store the 
 The batch job requires JAR files for S3 and PostgreSQL connectivity.
 
 ```bash
-# 1. Create a directory for dependencies
-mkdir -p jars
-
-# 2. Download the required JARs
-wget -P jars/ https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.540/aws-java-sdk-bundle-1.12.540.jar
-wget -P jars/ https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar
-wget -P jars/ https://jdbc.postgresql.org/download/postgresql-42.6.0.jar
-
-# 3. Copy JARs and the batch script to the Spark Master pod
+# Copy JARs and the batch script to the Spark Master pod
 kubectl exec $MASTER_POD -- mkdir -p /tmp/dependencies
 kubectl cp jars/aws-java-sdk-bundle-1.12.540.jar $MASTER_POD:/tmp/dependencies/
 kubectl cp jars/hadoop-aws-3.3.4.jar $MASTER_POD:/tmp/dependencies/

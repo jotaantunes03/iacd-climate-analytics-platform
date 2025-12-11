@@ -71,6 +71,8 @@ def main():
         .config("spark.hadoop.fs.s3a.path.style.access", "true") \
         .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
         .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false") \
+        .config("spark.sql.adaptive.enabled", "false") \
+        .config("spark.ui.port", "4050") \
         .getOrCreate()
 
     spark.sparkContext.setLogLevel("WARN")
@@ -118,12 +120,14 @@ def main():
     # Process Temperature every 30 seconds
     query_temp = df_temp.writeStream \
         .foreachBatch(lambda df, id: write_to_postgres(df, id, "climate_analysis")) \
+        .option("checkpointLocation", "s3a://raw-data/checkpoints/postgres/temp/") \
         .trigger(processingTime='30 seconds') \
         .start()
 
     # Process CO2 every 30 seconds
     query_co2 = df_co2.writeStream \
         .foreachBatch(lambda df, id: write_to_postgres(df, id, "co2_emissions")) \
+        .option("checkpointLocation", "s3a://raw-data/checkpoints/postgres/co2/") \
         .trigger(processingTime='30 seconds') \
         .start()
 

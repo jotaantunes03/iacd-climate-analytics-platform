@@ -55,6 +55,21 @@ Ensure you have the following software installed on your system:
 *   **Python** (3.9 or higher)
 *   **kubectl**
 
+### Dependencies
+The Spark jobs require specific JAR files for connecting to PostgreSQL and MinIO (S3). These must be placed in a `jars/` directory in the project root.
+
+*   **PostgreSQL Driver:**
+    *   **File:** `postgresql-42.6.0.jar`
+    *   **URL:** `https://jdbc.postgresql.org/download/postgresql-42.6.0.jar`
+*   **Hadoop-AWS (for S3 connectivity):**
+    *   **File:** `hadoop-aws-3.3.4.jar`
+    *   **URL:** `https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar`
+*   **AWS Java SDK Bundle (dependency for Hadoop-AWS):**
+    *   **File:** `aws-java-sdk-bundle-1.12.540.jar`
+    *   **URL:** `https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.540/aws-java-sdk-bundle-1.12.540.jar`
+
+> **Note:** The `start_project.ps1` script will attempt to download these automatically if they are missing.
+
 ### Installation
 
 This project includes detailed, step-by-step setup guides for different operating systems. Please follow the guide that matches your environment.
