@@ -18,7 +18,7 @@ Before you begin, ensure your environment is correctly configured:
 *   **Repository:** Clone the project repository to your local machine.
 
 ```powershell
-# Clone the specific project branch
+# Clone the project repository
 git clone https://github.com/jotaantunes03/iacd-climate-analytics-platform.git
 cd iacd-climate-analytics-platform
 ```

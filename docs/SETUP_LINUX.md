@@ -4,7 +4,6 @@ This guide details the steps to deploy and run the real-time climate analytics p
 
 **Target Environment:**
 *   **OS:** Ubuntu Server 22.04
-*   **Branch:** `feature/real-time-ingestion`
 *   **Orchestration:** Kubernetes (Minikube)
 *   **Container Engine:** Docker
 
@@ -43,8 +42,8 @@ Clone the project repository and start the local Kubernetes cluster.
 # Navigate to your preferred directory
 cd ~/Desktop
 
-# Clone the specific project branch
-git clone -b feature/real-time-ingestion https://github.com/jotaantunes03/iacd-climate-analytics-platform.git
+# Clone the project repository
+git clone https://github.com/jotaantunes03/iacd-climate-analytics-platform.git
 cd iacd-climate-analytics-platform
 
 # Start the Minikube cluster using the Docker driver
