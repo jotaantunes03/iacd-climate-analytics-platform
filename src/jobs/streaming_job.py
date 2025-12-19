@@ -7,6 +7,31 @@ writes them to separate locations in a MinIO S3 bucket.
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import split, col, trim
 import sys
+import time
+import socket
+
+def wait_for_socket(host, port, retries=50, delay=2):
+    """
+    Tenta conectar ao socket TCP. Se falhar, espera e tenta de novo.
+    Impede que o Spark crashe se o Producer ainda estiver a arrancar.
+    """
+    print(f"--> [WAIT] Waiting for Stream Source at {host}:{port}...")
+
+    for i in range(retries):
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(1)  # Timeout curto para teste
+            s.connect((host, port))
+            s.close()
+            print(f"--> [READY] Connection established! Starting Spark Stream.")
+            return True
+        except (ConnectionRefusedError, socket.timeout, OSError):
+            print(f"    ... waiting for producer ({i + 1}/{retries})")
+            time.sleep(delay)
+
+    print("--> [ERROR] Producer timed out. Spark will likely fail.")
+    return False
+
 
 # --- Spark Session Configuration ---
 # Initializes a Spark session with S3 configurations for MinIO.
@@ -22,6 +47,8 @@ spark = SparkSession.builder \
     .getOrCreate()
 
 spark.sparkContext.setLogLevel("WARN")
+
+wait_for_socket("stream-source", 9999)
 
 # 1. Read from Socket
 # Creates a DataFrame representing the stream of data from the specified socket.
@@ -70,24 +97,48 @@ co2_df = parsed_data_df.filter(
 ).select("Year", "Value", "Area", "Element", "Unit", "Item", "Source")
 
 # 4. Write Streams to S3
-# Configure and start the streaming queries to write the data to S3.
-# The trigger is set to 10 seconds to capture more mixed data in each batch.
+# Refactored to use foreachBatch to prevent writing empty files.
+
+# --- NOVAS FUNÇÕES PARA IMPEDIR FICHEIROS VAZIOS ---
+def save_temp_to_minio(df, epoch_id):
+    if not df.isEmpty():
+        df.write \
+            .mode("append") \
+            .csv("s3a://raw-data/temperature/", header=False)
+
+def save_co2_to_minio(df, epoch_id):
+    if not df.isEmpty():
+        df.write \
+            .mode("append") \
+            .csv("s3a://raw-data/emissions/", header=False)
+
+def save_to_minio(output_path):
+    """
+    Returns a function that writes the micro-batch DataFrame to MinIO
+    ONLY if the DataFrame is not empty.
+    """
+    def process_batch(df, epoch_id):
+        if not df.isEmpty():
+            # Write the non-empty batch to MinIO
+            # We use "append" mode to adding new data to the existing dataset
+            df.write \
+                .mode("append") \
+                .csv(output_path, header=False)
+        else:
+            # Optional: Log that the batch was empty (or do nothing)
+            pass
+    return process_batch
+
 
 temperature_query = temperature_df.writeStream \
-    .outputMode("append") \
-    .format("csv") \
-    .option("path", "s3a://raw-data/temperature/") \
+    .foreachBatch(save_temp_to_minio) \
     .option("checkpointLocation", "s3a://raw-data/checkpoints/temperature/") \
-    .option("header", "false") \
     .trigger(processingTime='20 seconds') \
     .start()
 
 co2_query = co2_df.writeStream \
-    .outputMode("append") \
-    .format("csv") \
-    .option("path", "s3a://raw-data/emissions/") \
+    .foreachBatch(save_co2_to_minio) \
     .option("checkpointLocation", "s3a://raw-data/checkpoints/emissions/") \
-    .option("header", "false") \
     .trigger(processingTime='20 seconds') \
     .start()
 

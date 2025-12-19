@@ -19,7 +19,7 @@ HOST = '0.0.0.0'
 PORT = 9999
 TEMPERATURE_DATA_FILE = '/app/data/raw/global_temp.csv'
 CO2_DATA_FILE = '/app/data/raw/co2_emissions.csv'
-SEND_INTERVAL_SECONDS = 2
+SEND_INTERVAL_SECONDS = 0.001
 FIELD_SEPARATOR = "|"
 FINAL_COLUMN_ORDER = [
     'Year', 'Value', 'Area', 'Area Code (M49)', 'Element', 'Element Code', 'Unit', 'Flag',
